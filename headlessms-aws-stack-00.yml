@@ -1,0 +1,168 @@
+Parameters:
+  appName:
+    Type: String
+  backetName:
+    Type: String
+  stageName:
+    Type: String
+    Default: dev
+  usagePlanQuotaLimit:
+    Type: Number
+    Default: 200
+  usagePlanQuotaPeriod:
+    Type: String
+    Default: MONTH
+    AllowedValues:
+      - DAY
+      - WEEK
+      - MONTH
+  usagePlanThrottleBurstLimit:
+    Type: Number
+    Default: 10
+  usagePlanThrottleRateLimit:
+    Type: Number
+    Default: 5
+Resources:
+  Role00:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${appName}-aws-role-00
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  Policy00:
+    Type: AWS::IAM::Policy
+    DependsOn:
+      - Role00
+    Properties:
+      PolicyName: !Sub ${appName}-aws-policy-00
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - 
+            Effect: Allow
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource: '*'
+      Roles:
+        - !Ref Role00
+  Layer00:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: !Sub ${appName}-aws-layer-00
+      CompatibleRuntimes: 
+        - python3.7
+      Content: 
+        S3Bucket: !Ref backetName
+        S3Key: layer.zip
+  Function00:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - Policy00
+      - Layer00
+    Properties:
+      FunctionName: !Sub ${appName}-aws-function-00
+      Code:
+        S3Bucket: !Ref backetName
+        S3Key: function.zip
+      Role: !GetAtt Role00.Arn
+      Runtime: python3.7
+      Handler: lambda_function.lambda_handler
+      MemorySize: 512
+      Timeout: 120
+      Layers:
+        - !Ref Layer00
+  Api00:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub ${appName}-aws-api-00
+      ApiKeySourceType: HEADER
+  Method00:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      ApiKeyRequired: true
+      RestApiId: !Ref Api00
+      ResourceId: !GetAtt Api00.RootResourceId
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Join 
+        - ''
+        - - 'arn:aws:apigateway:'
+          - !Ref 'AWS::Region'
+          - ':lambda:path/2015-03-31/functions/'
+          - !GetAtt Function00.Arn
+          - /invocations
+        RequestTemplates:
+          application/octet-stream: "{\n    \"body\": \"$input.body\",\n    \"viaRestApi\": true\n}"
+        IntegrationResponses:
+          - StatusCode: '200'
+      MethodResponses:
+        - StatusCode: '200'
+  LambdaPermission00:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - Method00
+    Properties:
+      FunctionName: !Ref Function00
+      Action: 'lambda:InvokeFunction'
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join 
+        - ''
+        - - 'arn:aws:execute-api:'
+          - !Ref 'AWS::Region'
+          - ':'
+          - !Ref 'AWS::AccountId'
+          - ':'
+          - !Ref Api00
+          - /*/POST/
+  Deployment00:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - LambdaPermission00
+    Properties:
+      RestApiId: !Ref Api00
+      StageName: !Ref stageName
+  ApiKey00:
+    Type: AWS::ApiGateway::ApiKey
+    DependsOn:
+      - Deployment00
+    Properties: 
+      Name: !Sub ${appName}-aws-apikey-00
+      Enabled: true
+      StageKeys: 
+        - RestApiId: !Ref Api00
+          StageName: !Ref stageName
+  UsagePlan00:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn:
+      - ApiKey00
+    Properties:
+      UsagePlanName: !Sub ${appName}-aws-usageplan-00
+      ApiStages:
+      - ApiId: !Ref Api00
+        Stage: !Ref stageName
+      Quota:
+        Limit: !Ref usagePlanQuotaLimit
+        Period: !Ref usagePlanQuotaPeriod
+      Throttle:
+        BurstLimit: !Ref usagePlanThrottleBurstLimit
+        RateLimit: !Ref usagePlanThrottleRateLimit
+  UsagePlanKey00:
+    Type: AWS::ApiGateway::UsagePlanKey
+    DependsOn:
+      - UsagePlan00
+    Properties:
+      KeyId: !Ref ApiKey00
+      KeyType: API_KEY
+      UsagePlanId: !Ref UsagePlan00
