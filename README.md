@@ -1,14 +1,16 @@
 # はじめに
 
-AWS LambdaとPythonを利用してヘッドレスブラウザをマイクロサービス化し、ほかのLambda関数や外部システムから呼び出せるようにした「headlessms」を作った際のメモ。
+AWS LambdaとPythonを利用してWebスクレイピングの処理をマイクロサービス化し、ほかのLambda関数や外部システムから呼び出せるようにした「headlessms」を作った際のメモ。
 
 このheadlessmsにboto3やAPI Gateway経由でPythonのコードを投げると、そのコードに従ってheadless chromeとseleniumによるWebスクレイピングを実行し結果を返してくれる。
 
 # 前提環境
 
-- Amazon Web Serbices
-- AWS CLI
-- Docker
+- [Amazon Web Serbices](https://aws.amazon.com)
+- [AWS CLI](https://aws.amazon.com/jp/cli/)
+- [Docker](https://www.docker.com/)
+- 構築手順はAmazon Linux 2（[AWS Cloud9](https://aws.amazon.com/jp/cloud9/)）上で検証した
+- [jq](https://stedolan.github.io/jq/)コマンド、[git](https://git-scm.com/)コマンド
 
 # headlessms構築手順
 
@@ -30,11 +32,11 @@ $ git clone https://github.com/r-wakatsuki/${app_name}.git $workdir
 
 ```
 headlessms/
-　├ headless_ms-aws-function-00/
+　├ headlessms-aws-function-00/
 　│　└ lambda_function.py
-　├ headless_ms-aws-layer-00/
+　├ headlessms-aws-layer-00/
 　│　└ Dockerfile
-　└ headless_ms-aws-stack-00.yml
+　└ headlessms-aws-stack-00.yml
 ```
 
 - Dockerfile
@@ -97,9 +99,9 @@ def lambda_handler(event, context):
     return(return200(func.scrape_process(driver)))
 ```
 
-- headless-aws-stack-00.yml
+- headlessms-aws-stack-00.yml
 
-```headless-aws-stack-00.yml
+```headlessms-aws-stack-00.yml
 Parameters:
   appName:
     Type: String
@@ -287,7 +289,7 @@ $ aws s3 mv ${workdir}/function.zip s3://${backet_name}/function.zip
 $ aws s3 mv ${workdir}/layer.zip s3://${backet_name}/layer.zip
 ```
 
-- CloudFormationでデプロイ。
+- CloudFormationでAWSにデプロイ。
 
 ```shell
 $ aws cloudformation create-stack --stack-name ${app_name}-aws-stack-00 \
@@ -301,7 +303,7 @@ $ aws cloudformation create-stack --stack-name ${app_name}-aws-stack-00 \
 
 ## ほかのLambda関数(Python)から使う場合
 
-`func.py`に記載されたPythonコードを`lambda_function.py`がboto3によりheadlessmsに送信し、スクレイピングされた結果のレスポンスを`lambda_function.py`がさらに処理するサンプルを記載する。
+`func.py`に記載されたPythonコードを`lambda_main.py`がboto3によりheadlessmsに送信し、スクレイピングされた結果のレスポンスを`lambda_main.py`がさらに処理するサンプルを記載する。
 
 送信する`func.py`内のコードに`def scrape_process(driver)`を定義すればheadlessmsが`(driver)`に起動済みのheadless chromeを渡してくれる。
 
@@ -321,7 +323,7 @@ $ aws cloudformation create-stack --stack-name ${app_name}-aws-stack-00 \
 
 IDとパスワードでログインをしたあとに別のページを開き、javascriptで生成されたdomから要素を取得する。
 
-```lambda_function.py
+```lambda_main.py
 import boto3,json,os
 from base64 import b64decode
 
@@ -370,7 +372,7 @@ def scrape_process(driver):
 
 AngularJSが使用されているWebページで生成されたdomから複数の要素を配列で取得して処理する。
 
-```lambda_function.py
+```lambda_main.py
 import json,boto3
 import urllib.request
 
@@ -422,8 +424,8 @@ def scrape_process(driver):
 
 IDとパスワードでログインをして取得したクッキーを使って指定のURLから画像データをダウンロードし、そのバイナリを配列で取得して処理する。
 
-```lambda_function.py
-import re,son,boto3,os
+```lambda_main.py
+import re,json,boto3,os
 from base64 import b64decode
 
 def lambda_handler(event, context):
