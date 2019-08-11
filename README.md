@@ -1,6 +1,6 @@
 # はじめに
 
-AWS LambdaとPythonを利用してWebスクレイピングの処理をマイクロサービス化し、ほかのLambda関数や外部システムから呼び出せるようにした「headlessms」を作った際のメモ。
+AWS LambdaとPythonを利用してWebスクレイピングの処理をマイクロサービス化し、ほかのLambdaや外部システムから呼び出せるようにした「headlessms」を作った際のメモ。
 
 このheadlessmsにboto3やAPI Gateway経由でPythonのコードを投げると、そのコードに従ってheadless chromeとseleniumによるWebスクレイピングを実行し結果を返してくれる。
 
@@ -9,8 +9,8 @@ AWS LambdaとPythonを利用してWebスクレイピングの処理をマイク�
 - [Amazon Web Serbices](https://aws.amazon.com)
 - [AWS CLI](https://aws.amazon.com/jp/cli/)
 - [Docker](https://www.docker.com/)
-- 構築手順はAmazon Linux 2（[AWS Cloud9](https://aws.amazon.com/jp/cloud9/)）上で検証した
 - [jq](https://stedolan.github.io/jq/)コマンド、[git](https://git-scm.com/)コマンド
+- 構築手順はAmazon Linux 2（[AWS Cloud9](https://aws.amazon.com/jp/cloud9/)）上で検証した
 
 # headlessms構築手順
 
@@ -41,6 +41,8 @@ headlessms/
 
 - Dockerfile
 
+headless chromeやseleniumなどのパッケージが含まれたLambda Layer用のzipを作成するためのDockerfile。
+
 ```Dockerfile
 FROM python:3.7
 WORKDIR /work
@@ -59,6 +61,8 @@ CMD apt update && \
 ```
 
 - lambda_function.py
+
+Lambdaに配置するコード。別のLambdaや外部システムから受け取ったスクレイピングコードを`/tmp/func.py`に書き込んで`import func`し、起動済みのheadless chromeを`func.scrape_process(driver)`で渡して実行する。
 
 ```lambda_function.py
 import json,sys
@@ -100,6 +104,8 @@ def lambda_handler(event, context):
 ```
 
 - headlessms-aws-stack-00.yml
+
+headlessmsの構成要素となるLambda、Layer、API GatewayなどのAWSリソースをCloud Formationで作成するためのyamlテンプレート。
 
 ```headlessms-aws-stack-00.yml
 Parameters:
@@ -307,7 +313,7 @@ $ aws cloudformation create-stack --stack-name ${app_name}-aws-stack-00 \
 
 送信する`func.py`内のコードに`def scrape_process(driver)`を定義すればheadlessmsが`(driver)`に起動済みのheadless chromeを渡してくれる。
 
-また、Lambda関数の実行ロールには最低でも以下の権限を持つポリシーをアタッチすること。
+また、Lambdaの実行ロールには最低でも以下の権限を持つポリシーをアタッチすること。
 
 ```Statement.json
 {
@@ -409,13 +415,13 @@ def scrape_process(driver):
     title = dom.xpath('//*[@class="title program-title-animate ng-binding"]')[0].text
     img_urls = dom.xpath('//*[@class="episode-image ng-scope"]/img/@src')
     comment_enum = dom.xpath('//*[@class="episodes"]//*[@class="ng-binding"]')
+    comment = ''
     if len(comment_enum) == 0:
-        comment = ''
+        pass
     else:
-        comment = ''
-        for index,item in enumerate(comment_enum):
-            if comment_enum[index-1].text is not None:
-                comment = comment + '<br />' + comment_enum[index-1].text
+        for item in comment_enum:
+            if item.text is not None:
+                comment = comment + '<br />' + item.text
 
     return(number, title, img_urls, comment)
 ```
@@ -491,7 +497,7 @@ def scrape_process(driver):
 ![image.png](https://qiita-image-store.s3.ap-northeast-1.amazonaws.com/0/258416/020224cf-119a-1bdd-ef1d-2af0dae31c3f.png)
 
 Pythonコードを記載した`func.py`を配置し、`＜APIキー＞`と`＜APIのURL＞`を指定して以下のようにcurlを実行すると、headlessmsからスクレイピングの結果を取得することができる。
-`func.py`の書き方は「ほかのLambda関数から使う場合」と同じである。
+`func.py`の書き方は「ほかのLambda関数から使う場合」と同じである。リクエストのデータにはbase64エンコードして指定すること。
 
 ```shell
 $ base64 -w0 func.py | curl -X POST -H "content-Type: application/octet-stream" -H "x-api-key: ＜APIキー＞" -d @- ＜APIのURL＞
