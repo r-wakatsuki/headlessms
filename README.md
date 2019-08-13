@@ -62,12 +62,13 @@ CMD apt update && \
 
 - lambda_function.py
 
-Lambdaに配置するコード。別のLambdaや外部システムから受け取ったスクレイピングコードを`/tmp/＜uuid＞.py`に書き込んで`import`し、起動済みのheadless chromeを`module.scrape_process(driver)`で渡して実行する。
+Lambdaに配置するコード。別のLambdaや外部システムから受け取ったスクレイピングコードを`/tmp/func.py`に書き込んで`import func`し、起動済みのheadless chromeを`func.scrape_process(driver)`で渡して実行する。
 
 ```lambda_function.py
-import json,sys,uuid,importlib
+import json,sys
 from base64 import b64decode
 from selenium import webdriver
+from subprocess import call 
 
 def lambda_handler(event, context):
 
@@ -89,18 +90,17 @@ def lambda_handler(event, context):
             'body': res_body
         }
 
-    moduleName = str(uuid.uuid4())
-
-    with open('/tmp/%s.py' % moduleName, mode='w') as f:
+    with open('/tmp/func.py', mode='w') as f:
         if event.get('viaRestApi','') == True:
             f.write(b64decode(event['body']).decode())
         else:
             f.write(event['body'])
 
     sys.path.insert(0, '/tmp/')
-    module = importlib.import_module(moduleName)
+    import func
+    call('rm -rf /tmp/*', shell=True)
 
-    return(return200(module.scrape_process(driver)))
+    return(return200(func.scrape_process(driver)))
 ```
 
 - headlessms-aws-stack-00.yml
@@ -509,7 +509,5 @@ $ base64 -w0 func.py | curl -X POST -H "content-Type: application/octet-stream" 
 
 https://qiita.com/nabehide/items/754eb7b7e9fff9a1047d
 https://takuya-1st.hatenablog.jp/entry/2018/02/20/014236
-https://qiita.com/r-wakatsuki/items/4076e3b8032d06f85aea
-https://qiita.com/r-wakatsuki/items/1cdb9493749dbc36bed2
 
 以上
