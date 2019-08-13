@@ -1,7 +1,6 @@
-import json,sys
+import json,sys,uuid,importlib
 from base64 import b64decode
 from selenium import webdriver
-from subprocess import call 
 
 def lambda_handler(event, context):
 
@@ -23,14 +22,15 @@ def lambda_handler(event, context):
             'body': res_body
         }
 
-    with open('/tmp/func.py', mode='w') as f:
+    moduleName = str(uuid.uuid4())
+
+    with open('/tmp/%s.py' % moduleName, mode='w') as f:
         if event.get('viaRestApi','') == True:
             f.write(b64decode(event['body']).decode())
         else:
             f.write(event['body'])
 
     sys.path.insert(0, '/tmp/')
-    import func
-    call('rm -rf /tmp/*', shell=True)
+    module = importlib.import_module(moduleName)
 
-    return(return200(func.scrape_process(driver)))
+    return(return200(module.scrape_process(driver)))
